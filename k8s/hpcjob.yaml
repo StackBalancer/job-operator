@@ -1,0 +1,16 @@
+apiVersion: kubernetes.hpc.com/v1
+kind: HPCJob
+metadata:
+  name: mock-hpc-job
+  namespace: default
+spec:
+  jobName: mock-hpc-job
+  state: Pending
+  image: mock-hpc-job:latest
+  replicas: 2
+  jobParams:
+    param1: "job-id-1234"
+    param2: "1000"
+status:
+  state: Pending
+  completionTime: null 

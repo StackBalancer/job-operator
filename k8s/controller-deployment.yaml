@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hpc-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: hpc-controller
+  template:
+    metadata:
+      labels:
+        app: hpc-controller
+    spec:
+      serviceAccountName: hpc-controller
+      containers:
+        - name: hpc-controller
+          image: hpc-controller  # Image containing your operator
+          imagePullPolicy: IfNotPresent
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: hpc-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: default
+  name: hpc-controller
+rules:
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: [""]
+  resources: ["configmaps"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: hpc-controller
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: hpc-controller
+  namespace: default
+roleRef:
+  kind: Role
+  name: hpc-controller
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hpc-controller
+rules:
+- apiGroups: ["kubernetes.in4it.com"]
+  resources: ["hpcjobs"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: hpc-controller
+subjects:
+- kind: ServiceAccount
+  name: hpc-controller
+  namespace: default
+roleRef:
+  kind: ClusterRole
+  name: hpc-controller
+  apiGroup: rbac.authorization.k8s.io
+

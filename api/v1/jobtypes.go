@@ -6,11 +6,12 @@ import (
 
 // HPCJobSpec defines the desired state of HPCJob
 type HPCJobSpec struct {
-	JobName   string            `json:"jobName"`             // Name of the HPC job
-	State     string            `json:"state"`               // State of the job (Pending, Running, Completed, Failed)
-	JobParams map[string]string `json:"jobParams,omitempty"` // Optional job parameters as key-value pairs
-	Image     string            `json:"image"`
-	Replicas  int               `json:"replicas"`
+	JobName         string            `json:"jobName"`             // Name of the HPC job
+	State           string            `json:"state"`               // State of the job (Pending, Running, Completed, Failed)
+	JobParams       map[string]string `json:"jobParams,omitempty"` // Optional job parameters as key-value pairs
+	Image           string            `json:"image"`
+	ImagePullPolicy string            `json:"imagePullPolicy,omitempty"`
+	Replicas        int               `json:"replicas"`
 }
 
 // HPCJobStatus defines the observed state of HPCJob

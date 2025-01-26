@@ -7,7 +7,8 @@ spec:
   jobName: mock-hpc-job
   state: Pending
   image: mock-hpc-job:latest
-  replicas: 2
+  imagePullPolicy: IfNotPresent
+  replicas: 1
   jobParams:
     param1: "job-id-1234"
     param2: "1000"

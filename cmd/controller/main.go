@@ -195,6 +195,14 @@ func main() {
 }
 
 func getDeploymentObject(hpcJob *hpcv1.HPCJob) *appsv1.Deployment {
+	var pullPolicy corev1.PullPolicy
+
+	if hpcJob.Spec.ImagePullPolicy != "" {
+		pullPolicy = corev1.PullPolicy(hpcJob.Spec.ImagePullPolicy)
+	} else {
+		pullPolicy = corev1.PullIfNotPresent
+	}
+
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: hpcJob.Name,
@@ -215,9 +223,10 @@ func getDeploymentObject(hpcJob *hpcv1.HPCJob) *appsv1.Deployment {
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name:  hpcJob.Name,
-							Image: hpcJob.Spec.Image,
-							Ports: []corev1.ContainerPort{{ContainerPort: 8080}},
+							Name:            hpcJob.Name,
+							Image:           hpcJob.Spec.Image,
+							ImagePullPolicy: pullPolicy,
+							Ports:           []corev1.ContainerPort{{ContainerPort: 8080}},
 							Env: []corev1.EnvVar{
 								{Name: "JOB_NAME", Value: hpcJob.Spec.JobName},
 								{Name: "JOB_PARAMS", Value: fmt.Sprintf("%v", hpcJob.Spec.JobParams)}, // Pass job params as env vars

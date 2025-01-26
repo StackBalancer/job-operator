@@ -15,8 +15,12 @@ spec:
       serviceAccountName: hpc-controller
       containers:
         - name: hpc-controller
-          image: hpc-controller  # Image containing your operator
+          image: hpc-controller
           imagePullPolicy: IfNotPresent
+          ports:
+          - name: metrics
+            containerPort: 9443
+            protocol: TCP
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -55,9 +59,15 @@ kind: ClusterRole
 metadata:
   name: hpc-controller
 rules:
-- apiGroups: ["kubernetes.in4it.com"]
+- apiGroups: ["kubernetes.hpc.com"]
   resources: ["hpcjobs"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["kubernetes.hpc.com"]
+  resources: ["hpcjobs/status"]
+  verbs: ["get", "update"]
+- apiGroups: ["kubernetes.hpc.com"]
+  resources: ["hpcjobs/finalizers"]
+  verbs: ["update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

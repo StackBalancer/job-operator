@@ -37,7 +37,6 @@ Build hpc-controller and load image into minikube:
 
 ```bash
 docker build -t hpc-controller .
-# Following commands can be replaced with (if your docker build is compatible with minikube): minikube image load staticpage-controller
 docker image save -o hpc-controller.tar hpc-controller
 minikube image load hpc-controller.tar
 rm hpc-controller.tar 
@@ -73,4 +72,3 @@ minikube delete
 - **Testing**: How to verify that your job is running properly.
 - **Cleanup**: Commands for cleaning up the deployed resources and Minikube cluster.
 
-This README should help set up and run the Kubernetes operator on Minikube, ensuring everything is deployed and works as expected. Let me know if you need any additional information!

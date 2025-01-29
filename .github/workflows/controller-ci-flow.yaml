@@ -10,11 +10,11 @@ on:
 
 jobs:
   setup:
-    name: Deploy Controller
+    name: Deploy Controller to Minikube
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       # Set up Go environment
@@ -32,45 +32,35 @@ jobs:
           key: ${{ runner.os }}-go-mod-${{ hashFiles('**/go.sum') }}
 
       # Build Docker image
-      - name: Build Docker Image
+      - name: Build controller image
         run: |
           docker build -t hpcjob-controller:${{ github.sha }} .
 
-      - name: Upload image tar file as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: hpcjob-controller-image
-          path: hpcjob-controller-${{ github.sha }}.tar
-
       # Save Docker image to tar file
-      - name: Save Docker Image to tar file
+      - name: Export controller image
         run: |
           docker save hpcjob-controller:${{ github.sha }} -o hpcjob-controller-${{ github.sha }}.tar
 
       # Set Minikube
-      - name: Install Minikube
+      - name: Run Minikube
         run: |
           curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
           sudo mv minikube /usr/local/bin/
           sudo chmod +x /usr/local/bin/minikube
-
-      - name: Set up Minikube
-        run: |
           minikube start --driver=docker
 
-      - name: Load Docker image into Minikube
+      - name: Load controller image into Minikube
         run: |
           minikube image load hpcjob-controller-${{ github.sha }}.tar
 
-      - name: Replace image tag
+      - name: Replace controller image tag
         run: |
           IMAGE_TAG="hpcjob-controller:${{ github.sha }}"
           sed -i "/image:/s|hpc-controller|$IMAGE_TAG|g" k8s/controller-deployment.yaml
 
-      # Set up kubectl
       - name: Set up kubectl
         run: |
-          echo "export KUBEVIRT_VERSION=$(kubectl version --client --short | cut -d " " -f 3)" >> $GITHUB_ENV
+          echo "export KUBEVIRT_VERSION=$(kubectl version --client | cut -d " " -f 3)" >> $GITHUB_ENV
           kubectl cluster-info
 
       # Deploy the controller to Minikube
@@ -80,16 +70,9 @@ jobs:
           kubectl apply -f k8s/controller-deployment.yaml
           kubectl apply -f k8s/hpcjob.yaml
 
-      - name: Check if deployment is created
-        run: |
-          kubectl get deployment mock-hpc-job
-
-      - name: Wait for deployment
+      # Verify controller is working
+      - name: Check mock-hpc-job deployment
         run: |
           kubectl wait --for=condition=available --timeout=15s deployment/mock-hpc-job
-
-      # Verify controller is working
-      - name: Verify Deployment
-        run: |
           kubectl get pods --namespace=default
           kubectl logs -l app=mock-hpc-job --namespace=default

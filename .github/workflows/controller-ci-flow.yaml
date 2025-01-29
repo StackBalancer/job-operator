@@ -31,15 +31,21 @@ jobs:
             ~/go/pkg/mod
           key: ${{ runner.os }}-go-mod-${{ hashFiles('**/go.sum') }}
 
-      # Build Docker image
       - name: Build controller image
         run: |
           docker build -t hpcjob-controller:${{ github.sha }} .
 
-      # Save Docker image to tar file
       - name: Export controller image
         run: |
           docker save hpcjob-controller:${{ github.sha }} -o hpcjob-controller-${{ github.sha }}.tar
+
+      - name: Build mock-hpc-job image
+        run: |
+          docker build -t mock-hpc-job ./mock-hpc-job-service
+
+      - name: Export mock-hpc-job image
+        run: |
+          docker save mock-hpc-job -o mock-hpc-job.tar
 
       # Set Minikube
       - name: Run Minikube
@@ -49,9 +55,10 @@ jobs:
           sudo chmod +x /usr/local/bin/minikube
           minikube start --driver=docker
 
-      - name: Load controller image into Minikube
+      - name: Load images into Minikube
         run: |
           minikube image load hpcjob-controller-${{ github.sha }}.tar
+          minikube image load mock-hpc-job.tar
 
       - name: Replace controller image tag
         run: |
@@ -73,10 +80,6 @@ jobs:
         run: |
           minikube ssh -- free -h
           minikube ssh -- df -h
-
-      - name: Wait for deployment to be ready
-        run: |
-          kubectl wait --for=condition=available deployment/mock-hpc-job --namespace=default --timeout=200s
 
       # Verify controller is working
       - name: Check mock-hpc-job deployment

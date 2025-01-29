@@ -65,7 +65,7 @@ jobs:
       - name: Replace image tag in controller-deployment.yaml
         run: |
           IMAGE_TAG="hpcjob-controller:${{ github.sha }}"
-          sed -i "s|hpc-controller|$IMAGE_TAG|g" k8s/controller-deployment.yaml
+          sed -i "/image:/s|hpc-controller|$IMAGE_TAG|g" k8s/controller-deployment.yaml
 
       # Set up kubectl
       - name: Set up kubectl

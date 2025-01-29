@@ -78,10 +78,11 @@ jobs:
         run: |
           kubectl create namespace hpcjob-controller || true
 
-      - name: Replace hpcjob namespace
+      - name: Replace namespace in resources
         run: |
           NAMESPACE="hpcjob-controller"
           sed -i "/namespace:/s|default|$NAMESPACE|g" k8s/hpcjob.yaml
+          sed -i "/namespace:/s|default|$NAMESPACE|g" k8s/controller-deployment.yaml
 
       - name: Deploy resources to Minikube
         run: |

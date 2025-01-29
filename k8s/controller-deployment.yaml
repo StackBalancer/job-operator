@@ -16,6 +16,8 @@ spec:
       containers:
         - name: hpc-controller
           image: hpc-controller
+          args:
+            - "--zap-log-level=debug"
           imagePullPolicy: IfNotPresent
           ports:
           - name: metrics
@@ -39,6 +41,12 @@ rules:
 - apiGroups: [""]
   resources: ["configmaps"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["kubernetes.hpc.com"]
+  resources: ["hpcjobs"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["kubernetes.hpc.com"]
+  resources: ["hpcjobs/status"]
+  verbs: ["get", "update", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

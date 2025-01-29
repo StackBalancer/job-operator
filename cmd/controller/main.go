@@ -10,6 +10,7 @@ import (
 
 	hpcv1 "hpc-operator/api/v1"
 
+	"go.uber.org/zap/zapcore"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -46,10 +47,10 @@ type HPCJobReconciler struct {
 
 // Reconcile handles changes to HPCJob resources
 func (r *HPCJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := log.FromContext(ctx).WithValues("hpcjob", req.NamespacedName)
-	log.Info("Reconciling HPCJob: %s/%s\n", req.Namespace, req.Name)
+	log := log.FromContext(ctx).WithValues("NamespacedName", req.NamespacedName)
+	log.Info("Reconciling HPCJob", "Namespace", req.Namespace, "Name", req.Name)
 
-	var hpcJob hpcv1.HPCJob
+	hpcJob := &hpcv1.HPCJob{}
 	// create deployment if not exists
 	deploymentsClient := r.kubeClient.AppsV1().Deployments(req.Namespace)
 	svClient := r.kubeClient.CoreV1().Services(req.Namespace)
@@ -58,10 +59,11 @@ func (r *HPCJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	hpcJobName := hpcJob.Name + req.Name
 
 	// Fetch the HPCJob custom resource
-	err := r.Client.Get(ctx, req.NamespacedName, &hpcJob)
+	err := r.Client.Get(ctx, req.NamespacedName, hpcJob)
 	if err != nil {
 		if k8serrors.IsNotFound(err) { // hpcjob not found, we can delete the resources
 			// handle deletion of HPCJob-related resources (e.g., HPC job resources in the HPC cluster)
+			log.Info("HPCJob resource not found. Ignoring since object must be deleted", "namespace", req.NamespacedName, "name", req.Name)
 			err = deploymentsClient.Delete(ctx, hpcJobName, metav1.DeleteOptions{})
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("couldn't delete deployment: %s", err)
@@ -73,27 +75,29 @@ func (r *HPCJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 			return ctrl.Result{}, nil
 
 		}
+		log.Error(err, "Failed to fetch HPCJob resource", "namespace", req.NamespacedName, "name", req.Name)
 		return ctrl.Result{}, err
 	}
+	log.Info("Fetched HPCJob resource", "state", hpcJob.Status.State, "jobName", hpcJob.Spec.JobName)
 
 	// Check if Deployment exists
 	deployment, err := deploymentsClient.Get(ctx, hpcJobName, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// Create Deployment
-			deploymentObj := getDeploymentObject(&hpcJob)
+			deploymentObj := getDeploymentObject(hpcJob)
 			_, err := deploymentsClient.Create(ctx, deploymentObj, metav1.CreateOptions{})
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("couldn't create deployment: %s", err)
 			}
 			// Create Service
-			serviceObj := getServiceObject(&hpcJob)
+			serviceObj := getServiceObject(hpcJob)
 			_, err = svClient.Create(ctx, serviceObj, metav1.CreateOptions{})
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("couldn't create service: %s", err)
 			}
 
-			log.Info("Created Deployment and Service for HPCJob: %s\n", hpcJobName)
+			log.Info("Created Deployment and Service for HPCJob", "HPCJob", hpcJobName)
 			return ctrl.Result{}, nil
 		} else {
 			return ctrl.Result{}, fmt.Errorf("couldn't get object: %s", err)
@@ -112,25 +116,27 @@ func (r *HPCJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 
 		// Log the update
-		log.Info("Updated Deployment replicas for HPCJob: %s\n", hpcJobName)
+		log.Info("Updated Deployment replicas for HPCJob", "HPCJob", hpcJobName)
 		return ctrl.Result{}, nil
 	}
 
 	// Update the Job Status
-	if err := r.updateJobStatus(ctx, &hpcJob); err != nil {
+	log.Info("Updating HPCJob status", "currentState", hpcJob.Status.State)
+	if err := r.updateJobStatus(ctx, hpcJob); err != nil {
+		log.Error(err, "Failed to update HPCJob status", "namespace", req.Namespace, "name", req.Name)
 		return ctrl.Result{}, fmt.Errorf("failed to update job status: %v", err)
 	}
 
 	// Simulate job completion and update the status
 	if hpcJob.Status.State != "Completed" {
-		log.Info("Simulating job completion for HPCJob: %s\n", hpcJobName)
+		log.Info("Simulating job completion for HPCJob", "HPCJob", hpcJobName)
 		time.Sleep(5 * time.Second) // Simulate job running for 5 seconds
 		hpcJob.Status.State = "Completed"
 		hpcJob.Status.CompletionTime = &metav1.Time{}
-		if err := r.Status().Update(ctx, &hpcJob); err != nil {
+		if err := r.Status().Update(ctx, hpcJob); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to update HPCJob status: %v", err)
 		}
-		log.Info("HPCJob: %s completed successfully\n", hpcJobName)
+		log.Info("HPCJob completed successfully", "HPCJob", hpcJobName)
 	}
 
 	log.Info("HPCJob deployment is up-to-date", "name", hpcJobName)
@@ -142,6 +148,11 @@ func main() {
 		config *rest.Config
 		err    error
 	)
+	opts := zap.Options{
+		Development: true,
+		Level:       zapcore.DebugLevel,
+	}
+
 	kubeconfigFilePath := filepath.Join(homedir.HomeDir(), ".kube", "config")
 	if _, err := os.Stat(kubeconfigFilePath); errors.Is(err, os.ErrNotExist) { // if kube config doesn't exist, try incluster config
 		config, err = rest.InClusterConfig()
@@ -162,7 +173,7 @@ func main() {
 	}
 
 	// Set logger for the controller
-	ctrl.SetLogger(zap.New())
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 	// Create a new controller manager
 	mgr, err := ctrl.NewManager(config, ctrl.Options{
@@ -258,12 +269,35 @@ func getServiceObject(hpcJob *hpcv1.HPCJob) *corev1.Service {
 
 // Update the status of the job (i.e., whether it is still running or completed)
 func (r *HPCJobReconciler) updateJobStatus(ctx context.Context, hpcJob *hpcv1.HPCJob) error {
+	log := log.FromContext(ctx)
+
+	log.Info("Updating job status", "currentState", hpcJob.Status.State, "jobName", hpcJob.Spec.JobName)
+
+	log.Info("Attempting to update HPCJob status",
+		"name", hpcJob.Name,
+		"namespace", hpcJob.Namespace,
+		"state", hpcJob.Status.State,
+		"resourceVersion", hpcJob.ObjectMeta.ResourceVersion,
+	)
+
 	if hpcJob.Status.State == "" {
+		log.Info("Initial state is empty, setting state to 'Pending'")
 		hpcJob.Status.State = "Pending"
 	}
 	if err := r.Status().Update(ctx, hpcJob); err != nil {
+		log.Error(err, "Failed to update HPCJob status",
+			"name", hpcJob.Name,
+			"namespace", hpcJob.Namespace,
+			"state", hpcJob.Status.State,
+			"resourceVersion", hpcJob.ObjectMeta.ResourceVersion,
+		)
 		return fmt.Errorf("failed to update HPCJob status: %v", err)
 	}
+	log.Info("Successfully updated HPCJob status",
+		"name", hpcJob.Name,
+		"namespace", hpcJob.Namespace,
+		"newState", hpcJob.Status.State,
+	)
 	return nil
 }
 

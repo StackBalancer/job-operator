@@ -62,7 +62,7 @@ jobs:
         run: |
           minikube image load hpcjob-controller-${{ github.sha }}.tar
 
-      - name: Replace image tag in controller-deployment.yaml
+      - name: Replace image tag
         run: |
           IMAGE_TAG="hpcjob-controller:${{ github.sha }}"
           sed -i "/image:/s|hpc-controller|$IMAGE_TAG|g" k8s/controller-deployment.yaml
@@ -78,9 +78,11 @@ jobs:
         run: |
           kubectl create namespace hpcjob-controller || true
 
-      - name: Deploy controller to Minikube
+      - name: Deploy resources to Minikube
         run: |
+          kubectl apply -f k8s/crd.yaml
           kubectl apply -f k8s/controller-deployment.yaml
+          kubectl apply -f k8s/hpcjob.yaml
 
       # Wait for deployment to complete
       - name: Wait for deployment

@@ -74,16 +74,6 @@ jobs:
           kubectl cluster-info
 
       # Deploy the controller to Minikube
-      - name: Create namespace for HPCJob
-        run: |
-          kubectl create namespace hpcjob-controller || true
-
-      - name: Replace namespace in resources
-        run: |
-          NAMESPACE="hpcjob-controller"
-          sed -i "/namespace:/s|default|$NAMESPACE|g" k8s/hpcjob.yaml
-          sed -i "/namespace:/s|default|$NAMESPACE|g" k8s/controller-deployment.yaml
-
       - name: Deploy resources to Minikube
         run: |
           kubectl apply -f k8s/crd.yaml
@@ -92,14 +82,14 @@ jobs:
 
       - name: Check if deployment is created
         run: |
-          kubectl get deployment mock-hpc-job -n hpcjob-controller
+          kubectl get deployment mock-hpc-job
 
       - name: Wait for deployment
         run: |
-          kubectl wait --for=condition=available --timeout=600s deployment/mock-hpc-job -n hpcjob-controller
+          kubectl wait --for=condition=available --timeout=600s deployment/mock-hpc-job
 
       # Verify controller is working
       - name: Verify Deployment
         run: |
-          kubectl get pods --namespace=hpcjob-controller
-          kubectl logs -l app=mock-hpc-job --namespace=hpcjob-controller
+          kubectl get pods --namespace=default
+          kubectl logs -l app=mock-hpc-job --namespace=default

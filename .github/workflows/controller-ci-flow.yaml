@@ -58,11 +58,6 @@ jobs:
           IMAGE_TAG="hpcjob-controller:${{ github.sha }}"
           sed -i "/image:/s|hpc-controller|$IMAGE_TAG|g" k8s/controller-deployment.yaml
 
-      - name: Set up kubectl
-        run: |
-          echo "export KUBEVIRT_VERSION=$(kubectl version --client | cut -d " " -f 3)" >> $GITHUB_ENV
-          kubectl cluster-info
-
       # Deploy the controller to Minikube
       - name: Deploy resources to Minikube
         run: |

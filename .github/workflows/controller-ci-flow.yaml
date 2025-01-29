@@ -65,6 +65,19 @@ jobs:
           kubectl apply -f k8s/controller-deployment.yaml
           kubectl apply -f k8s/hpcjob.yaml
 
+      - name: Verify controller image in Minikube
+        run: |
+          minikube ssh -- docker images
+
+      - name: Check Minikube resources
+        run: |
+          minikube ssh -- free -h
+          minikube ssh -- df -h
+
+      - name: Wait for deployment to be ready
+        run: |
+          kubectl wait --for=condition=available deployment/mock-hpc-job --namespace=hpcjob-controller --timeout=200s
+
       # Verify controller is working
       - name: Check mock-hpc-job deployment
         run: |

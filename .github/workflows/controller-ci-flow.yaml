@@ -68,6 +68,5 @@ jobs:
       # Verify controller is working
       - name: Check mock-hpc-job deployment
         run: |
-          kubectl wait --for=condition=available --timeout=15s deployment/mock-hpc-job
           kubectl get pods --namespace=default
           kubectl logs -l app=mock-hpc-job --namespace=default

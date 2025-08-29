@@ -4,34 +4,34 @@ import "k8s.io/apimachinery/pkg/runtime"
 
 // DeepCopyInto copies all properties of this object into another object of the
 // same type that is provided as a pointer.
-func (in *HPCJob) DeepCopyInto(out *HPCJob) {
+func (in *TaskJob) DeepCopyInto(out *TaskJob) {
 	out.TypeMeta = in.TypeMeta
 	out.ObjectMeta = in.ObjectMeta
-	out.Spec = HPCJobSpec{
+	out.Spec = TaskJobSpec{
 		JobName:   in.Spec.JobName,
-		State:     in.Spec.State,
 		JobParams: in.Spec.JobParams,
-		Replicas:  in.Spec.Replicas,
 		Image:     in.Spec.Image,
+		ImagePullPolicy: in.Spec.ImagePullPolicy,
+		Replicas:  in.Spec.Replicas,
 	}
 }
 
 // DeepCopyObject returns a generically typed copy of an object
-func (in *HPCJob) DeepCopyObject() runtime.Object {
-	out := HPCJob{}
+func (in *TaskJob) DeepCopyObject() runtime.Object {
+	out := TaskJob{}
 	in.DeepCopyInto(&out)
 
 	return &out
 }
 
 // DeepCopyObject returns a generically typed copy of an object
-func (in *HPCJobList) DeepCopyObject() runtime.Object {
-	out := HPCJobList{}
+func (in *TaskJobList) DeepCopyObject() runtime.Object {
+	out := TaskJobList{}
 	out.TypeMeta = in.TypeMeta
 	out.ListMeta = in.ListMeta
 
 	if in.Items != nil {
-		out.Items = make([]HPCJob, len(in.Items))
+		out.Items = make([]TaskJob, len(in.Items))
 		for i := range in.Items {
 			in.Items[i].DeepCopyInto(&out.Items[i])
 		}

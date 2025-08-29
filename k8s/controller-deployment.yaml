@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: hpc-controller
+  name: task-job-controller
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: hpc-controller
+      app: task-job-controller
   template:
     metadata:
       labels:
-        app: hpc-controller
+        app: task-job-controller
     spec:
-      serviceAccountName: hpc-controller
+      serviceAccountName: task-job-controller
       containers:
-        - name: hpc-controller
-          image: hpc-controller
+        - name: task-job-controller
+          image: task-job-controller
           args:
             - "--zap-log-level=debug"
           imagePullPolicy: IfNotPresent
@@ -27,66 +27,69 @@ spec:
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: hpc-controller
+  name: task-job-controller
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   namespace: default
-  name: hpc-controller
+  name: task-job-controller
 rules:
+- apiGroups: [""]
+  resources: ["pods", "services"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: ["apps"]
   resources: ["deployments"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
 - apiGroups: [""]
   resources: ["configmaps"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: ["kubernetes.hpc.com"]
-  resources: ["hpcjobs"]
+- apiGroups: ["kubernetes.tjob.com"]
+  resources: ["taskjobs"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: ["kubernetes.hpc.com"]
-  resources: ["hpcjobs/status"]
+- apiGroups: ["kubernetes.tjob.com"]
+  resources: ["taskjobs/status"]
   verbs: ["get", "update", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: hpc-controller
+  name: task-job-controller
   namespace: default
 subjects:
 - kind: ServiceAccount
-  name: hpc-controller
+  name: task-job-controller
   namespace: default
 roleRef:
   kind: Role
-  name: hpc-controller
+  name: task-job-controller
   apiGroup: rbac.authorization.k8s.io
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: hpc-controller
+  name: task-job-controller
 rules:
-- apiGroups: ["kubernetes.hpc.com"]
-  resources: ["hpcjobs"]
+- apiGroups: ["kubernetes.tjob.com"]
+  resources: ["taskjobs"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: ["kubernetes.hpc.com"]
-  resources: ["hpcjobs/status"]
+- apiGroups: ["kubernetes.tjob.com"]
+  resources: ["taskjobs/status"]
   verbs: ["get", "update"]
-- apiGroups: ["kubernetes.hpc.com"]
-  resources: ["hpcjobs/finalizers"]
+- apiGroups: ["kubernetes.tjob.com"]
+  resources: ["taskjobs/finalizers"]
   verbs: ["update"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: hpc-controller
+  name: task-job-controller
 subjects:
 - kind: ServiceAccount
-  name: hpc-controller
+  name: task-job-controller
   namespace: default
 roleRef:
   kind: ClusterRole
-  name: hpc-controller
+  name: task-job-controller
   apiGroup: rbac.authorization.k8s.io
 

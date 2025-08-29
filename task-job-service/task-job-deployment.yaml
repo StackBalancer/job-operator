@@ -1,0 +1,22 @@
+# task-job-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: task-job
+  labels:
+    app: task-job
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: task-job
+  template:
+    metadata:
+      labels:
+        app: task-job
+    spec:
+      containers:
+        - name: task-job
+          image: task-job:latest
+          ports:
+            - containerPort: 8080

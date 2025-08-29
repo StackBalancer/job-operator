@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: task-job-service
+spec:
+  selector:
+    app: task-job
+  ports:
+    - protocol: TCP
+      port: 8080
+      targetPort: 8080

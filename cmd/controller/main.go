@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	hpcv1 "hpc-operator/api/v1"
+	taskjobv1 "task-job-operator/api/v1"
 
 	"go.uber.org/zap/zapcore"
 	appsv1 "k8s.io/api/apps/v1"
@@ -35,69 +35,73 @@ var (
 )
 
 func init() {
-	utilruntime.Must(hpcv1.AddToScheme(scheme))
+	utilruntime.Must(taskjobv1.AddToScheme(scheme))
 }
 
-// HPCJobReconciler reconciles HPCJob resources
-type HPCJobReconciler struct {
+// TaskJobReconciler reconciles TaskJob resources
+type TaskJobReconciler struct {
 	client.Client
 	scheme     *runtime.Scheme
 	kubeClient *kubernetes.Clientset
 }
 
-// Reconcile handles changes to HPCJob resources
-func (r *HPCJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+// Reconcile handles changes to TaskJob resources
+func (r *TaskJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	log := log.FromContext(ctx).WithValues("NamespacedName", req.NamespacedName)
-	log.Info("Reconciling HPCJob", "Namespace", req.Namespace, "Name", req.Name)
+	log.Info("Reconciling TaskJob", "Namespace", req.Namespace, "Name", req.Name)
 
-	hpcJob := &hpcv1.HPCJob{}
+	taskJob := &taskjobv1.TaskJob{}
 	// create deployment if not exists
 	deploymentsClient := r.kubeClient.AppsV1().Deployments(req.Namespace)
 	svClient := r.kubeClient.CoreV1().Services(req.Namespace)
 
-	// Define the deployment name based on the HPCJob name
-	hpcJobName := hpcJob.Name + req.Name
+	// Define the deployment name based on the TaskJob name
+	jobName := taskJob.Spec.JobName
+	if jobName == "" {
+		jobName = req.Name
+	}
 
-	// Fetch the HPCJob custom resource
-	err := r.Client.Get(ctx, req.NamespacedName, hpcJob)
+	// Fetch the TaskJob custom resource
+	err := r.Client.Get(ctx, req.NamespacedName, taskJob)
 	if err != nil {
-		if k8serrors.IsNotFound(err) { // hpcjob not found, we can delete the resources
-			// handle deletion of HPCJob-related resources (e.g., HPC job resources in the HPC cluster)
-			log.Info("HPCJob resource not found. Ignoring since object must be deleted", "namespace", req.NamespacedName, "name", req.Name)
-			err = deploymentsClient.Delete(ctx, hpcJobName, metav1.DeleteOptions{})
+		if k8serrors.IsNotFound(err) {
+			// handle deletion of TaskJob-related resource if taskJob not found
+			log.Info("TaskJob resource not found. Ignoring since object must be deleted", "namespace", req.NamespacedName, "name", req.Name)
+			err = deploymentsClient.Delete(ctx, jobName, metav1.DeleteOptions{})
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("couldn't delete deployment: %s", err)
 			}
-			err = svClient.Delete(ctx, hpcJobName, metav1.DeleteOptions{})
+			err = svClient.Delete(ctx, jobName, metav1.DeleteOptions{})
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("couldn't delete service: %s", err)
 			}
 			return ctrl.Result{}, nil
 
 		}
-		log.Error(err, "Failed to fetch HPCJob resource", "namespace", req.NamespacedName, "name", req.Name)
+		log.Error(err, "Failed to fetch TaskJob resource", "namespace", req.NamespacedName, "name", req.Name)
 		return ctrl.Result{}, err
 	}
-	log.Info("Fetched HPCJob resource", "state", hpcJob.Status.State, "jobName", hpcJob.Spec.JobName)
+	log.Info("Fetched TaskJob", "spec", taskJob.Spec, "status", taskJob.Status)
+	//log.Info("Fetched TaskJob resource", "state", taskJob.Status.State, "jobName", taskJob.Spec.JobName)
 
 	// Check if Deployment exists
-	deployment, err := deploymentsClient.Get(ctx, hpcJobName, metav1.GetOptions{})
+	deployment, err := deploymentsClient.Get(ctx, jobName, metav1.GetOptions{})
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// Create Deployment
-			deploymentObj := getDeploymentObject(hpcJob)
+			deploymentObj := getDeploymentObject(taskJob)
 			_, err := deploymentsClient.Create(ctx, deploymentObj, metav1.CreateOptions{})
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("couldn't create deployment: %s", err)
 			}
 			// Create Service
-			serviceObj := getServiceObject(hpcJob)
+			serviceObj := getServiceObject(taskJob)
 			_, err = svClient.Create(ctx, serviceObj, metav1.CreateOptions{})
 			if err != nil {
 				return ctrl.Result{}, fmt.Errorf("couldn't create service: %s", err)
 			}
 
-			log.Info("Created Deployment and Service for HPCJob", "HPCJob", hpcJobName)
+			log.Info("Created Deployment and Service for TaskJob", "TaskJob", jobName)
 			return ctrl.Result{}, nil
 		} else {
 			return ctrl.Result{}, fmt.Errorf("couldn't get object: %s", err)
@@ -105,9 +109,9 @@ func (r *HPCJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// Check if the current replica count differs from the desired count
-	if int(*deployment.Spec.Replicas) != hpcJob.Spec.Replicas {
-		// Update the deployment replica count to match the HPCJob specification
-		deployment.Spec.Replicas = int32Ptr(int32(hpcJob.Spec.Replicas))
+	if int(*deployment.Spec.Replicas) != taskJob.Spec.Replicas {
+		// Update the deployment replica count to match the TaskJob specification
+		deployment.Spec.Replicas = int32Ptr(int32(taskJob.Spec.Replicas))
 
 		// Apply the update to the cluster
 		_, err := deploymentsClient.Update(ctx, deployment, metav1.UpdateOptions{})
@@ -116,31 +120,19 @@ func (r *HPCJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		}
 
 		// Log the update
-		log.Info("Updated Deployment replicas for HPCJob", "HPCJob", hpcJobName)
+		log.Info("Updated Deployment replicas for TaskJob", "TaskJob", jobName)
 		return ctrl.Result{}, nil
 	}
 
 	// Update the Job Status
-	log.Info("Updating HPCJob status", "currentState", hpcJob.Status.State)
-	if err := r.updateJobStatus(ctx, hpcJob); err != nil {
-		log.Error(err, "Failed to update HPCJob status", "namespace", req.Namespace, "name", req.Name)
-		return ctrl.Result{}, fmt.Errorf("failed to update job status: %v", err)
+	log.Info("Updating TaskJob status", "currentState", taskJob.Status.State)
+	if err := r.updateJobStatus(ctx, taskJob); err != nil {
+		return ctrl.Result{}, err
 	}
 
-	// Simulate job completion and update the status
-	if hpcJob.Status.State != "Completed" {
-		log.Info("Simulating job completion for HPCJob", "HPCJob", hpcJobName)
-		time.Sleep(5 * time.Second) // Simulate job running for 5 seconds
-		hpcJob.Status.State = "Completed"
-		hpcJob.Status.CompletionTime = &metav1.Time{}
-		if err := r.Status().Update(ctx, hpcJob); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to update HPCJob status: %v", err)
-		}
-		log.Info("HPCJob completed successfully", "HPCJob", hpcJobName)
-	}
 
-	log.Info("HPCJob deployment is up-to-date", "name", hpcJobName)
-	return ctrl.Result{}, nil
+	// Requeue to keep monitoring Pods
+	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
 }
 
 func main() {
@@ -184,10 +176,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Register HPCJob controller
+	// Register TaskJob controller
 	err = ctrl.NewControllerManagedBy(mgr).
-		For(&hpcv1.HPCJob{}).
-		Complete(&HPCJobReconciler{
+		For(&taskjobv1.TaskJob{}).
+		Complete(&TaskJobReconciler{
 			Client:     mgr.GetClient(),
 			scheme:     mgr.GetScheme(),
 			kubeClient: clientset,
@@ -205,42 +197,42 @@ func main() {
 
 }
 
-func getDeploymentObject(hpcJob *hpcv1.HPCJob) *appsv1.Deployment {
+func getDeploymentObject(taskJob *taskjobv1.TaskJob) *appsv1.Deployment {
 	var pullPolicy corev1.PullPolicy
 
-	if hpcJob.Spec.ImagePullPolicy != "" {
-		pullPolicy = corev1.PullPolicy(hpcJob.Spec.ImagePullPolicy)
+	if taskJob.Spec.ImagePullPolicy != "" {
+		pullPolicy = corev1.PullPolicy(taskJob.Spec.ImagePullPolicy)
 	} else {
 		pullPolicy = corev1.PullIfNotPresent
 	}
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: hpcJob.Name,
+			Name: taskJob.Spec.JobName,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: int32Ptr(int32(hpcJob.Spec.Replicas)),
+			Replicas: int32Ptr(int32(taskJob.Spec.Replicas)),
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"app": hpcJob.Name,
+					"app": taskJob.Spec.JobName,
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"app": hpcJob.Name,
+						"app": taskJob.Spec.JobName,
 					},
 				},
 				Spec: corev1.PodSpec{
 					Containers: []corev1.Container{
 						{
-							Name:            hpcJob.Name,
-							Image:           hpcJob.Spec.Image,
+							Name:            taskJob.Spec.JobName,
+							Image:           taskJob.Spec.Image,
 							ImagePullPolicy: pullPolicy,
 							Ports:           []corev1.ContainerPort{{ContainerPort: 8080}},
 							Env: []corev1.EnvVar{
-								{Name: "JOB_NAME", Value: hpcJob.Spec.JobName},
-								{Name: "JOB_PARAMS", Value: fmt.Sprintf("%v", hpcJob.Spec.JobParams)}, // Pass job params as env vars
+								{Name: "JOB_NAME", Value: taskJob.Spec.JobName},
+								{Name: "JOB_PARAMS", Value: fmt.Sprintf("%v", taskJob.Spec.JobParams)}, // Pass taskJob params as env vars
 							},
 						},
 					},
@@ -250,13 +242,13 @@ func getDeploymentObject(hpcJob *hpcv1.HPCJob) *appsv1.Deployment {
 	}
 }
 
-func getServiceObject(hpcJob *hpcv1.HPCJob) *corev1.Service {
+func getServiceObject(taskJob *taskjobv1.TaskJob) *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: hpcJob.Name,
+			Name: taskJob.Spec.JobName,
 		},
 		Spec: corev1.ServiceSpec{
-			Selector: map[string]string{"app": hpcJob.Name},
+			Selector: map[string]string{"app": taskJob.Spec.JobName},
 			Ports: []corev1.ServicePort{
 				{
 					Port:       8080,
@@ -267,39 +259,71 @@ func getServiceObject(hpcJob *hpcv1.HPCJob) *corev1.Service {
 	}
 }
 
-// Update the status of the job (i.e., whether it is still running or completed)
-func (r *HPCJobReconciler) updateJobStatus(ctx context.Context, hpcJob *hpcv1.HPCJob) error {
-	log := log.FromContext(ctx)
+func (r *TaskJobReconciler) updateJobStatus(ctx context.Context, taskJob *taskjobv1.TaskJob) error {
+    log := log.FromContext(ctx)
 
-	log.Info("Updating job status", "currentState", hpcJob.Status.State, "jobName", hpcJob.Spec.JobName)
+    // List Pods for this TaskJob (selector must match Deployment labels)
+    pods, err := r.kubeClient.CoreV1().Pods(taskJob.Namespace).List(ctx, metav1.ListOptions{
+        LabelSelector: fmt.Sprintf("app=%s", taskJob.Spec.JobName),
+    })
+    if err != nil {
+        log.Error(err, "Failed to list pods for TaskJob", "jobName", taskJob.Spec.JobName)
+        return err
+    }
 
-	log.Info("Attempting to update HPCJob status",
-		"name", hpcJob.Name,
-		"namespace", hpcJob.Namespace,
-		"state", hpcJob.Status.State,
-		"resourceVersion", hpcJob.ObjectMeta.ResourceVersion,
-	)
+    // Default state
+    state := "Pending"
+    hasReady := false
+    hasFailed := false
 
-	if hpcJob.Status.State == "" {
-		log.Info("Initial state is empty, setting state to 'Pending'")
-		hpcJob.Status.State = "Pending"
-	}
-	if err := r.Status().Update(ctx, hpcJob); err != nil {
-		log.Error(err, "Failed to update HPCJob status",
-			"name", hpcJob.Name,
-			"namespace", hpcJob.Namespace,
-			"state", hpcJob.Status.State,
-			"resourceVersion", hpcJob.ObjectMeta.ResourceVersion,
-		)
-		return fmt.Errorf("failed to update HPCJob status: %v", err)
-	}
-	log.Info("Successfully updated HPCJob status",
-		"name", hpcJob.Name,
-		"namespace", hpcJob.Namespace,
-		"newState", hpcJob.Status.State,
-	)
-	return nil
+    for _, pod := range pods.Items {
+        switch pod.Status.Phase {
+        case corev1.PodRunning:
+            allReady := true
+            for _, cs := range pod.Status.ContainerStatuses {
+                if !cs.Ready {
+                    allReady = false
+                }
+                if cs.State.Waiting != nil && cs.State.Waiting.Reason == "CrashLoopBackOff" {
+                    hasFailed = true
+                }
+            }
+            if allReady {
+                hasReady = true
+            }
+        case corev1.PodFailed:
+            hasFailed = true
+        case corev1.PodSucceeded:
+            state = "Completed"
+        }
+    }
+
+    // Final state decision
+    switch {
+    case hasFailed:
+        state = "Failed"
+    case hasReady && state != "Completed":
+        state = "Running"
+    }
+
+    // Only update if state changed
+    if taskJob.Status.State != state {
+        taskJob.Status.State = state
+        if state == "Completed" {
+            now := metav1.Now()
+            taskJob.Status.CompletionTime = &now
+        }
+
+        if err := r.Status().Update(ctx, taskJob); err != nil {
+            log.Error(err, "Failed to update TaskJob status")
+            return err
+        }
+        log.Info("Updated TaskJob state", "newState", state)
+    }
+
+    return nil
 }
+
 
 func int32Ptr(i int32) *int32 {
 	return &i

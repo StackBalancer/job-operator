@@ -1,4 +1,4 @@
-name: Build and Deploy HPCJob Controller to Minikube
+name: Build and Deploy TaskJob Controller to Minikube
 
 on:
   push:
@@ -33,19 +33,19 @@ jobs:
 
       - name: Build controller image
         run: |
-          docker build -t hpcjob-controller:${{ github.sha }} .
+          docker build -t task-job-controller:${{ github.sha }} .
 
       - name: Export controller image
         run: |
-          docker save hpcjob-controller:${{ github.sha }} -o hpcjob-controller-${{ github.sha }}.tar
+          docker save task-job-controller:${{ github.sha }} -o task-job-controller-${{ github.sha }}.tar
 
-      - name: Build mock-hpc-job image
+      - name: Build task-job image
         run: |
-          docker build -t mock-hpc-job ./mock-hpc-job-service
+          docker build -t task-job ./task-job-service
 
-      - name: Export mock-hpc-job image
+      - name: Export task-job image
         run: |
-          docker save mock-hpc-job -o mock-hpc-job.tar
+          docker save task-job -o task-job.tar
 
       # Set Minikube
       - name: Run Minikube
@@ -57,20 +57,20 @@ jobs:
 
       - name: Load images into Minikube
         run: |
-          minikube image load hpcjob-controller-${{ github.sha }}.tar
-          minikube image load mock-hpc-job.tar
+          minikube image load task-job-controller-${{ github.sha }}.tar
+          minikube image load task-job.tar
 
       - name: Replace controller image tag
         run: |
-          IMAGE_TAG="hpcjob-controller:${{ github.sha }}"
-          sed -i "/image:/s|hpc-controller|$IMAGE_TAG|g" k8s/controller-deployment.yaml
+          IMAGE_TAG="task-job-controller:${{ github.sha }}"
+          sed -i "/image:/s|task-job-controller|$IMAGE_TAG|g" k8s/controller-deployment.yaml
 
       # Deploy the controller to Minikube
       - name: Deploy resources to Minikube
         run: |
           kubectl apply -f k8s/crd.yaml
           kubectl apply -f k8s/controller-deployment.yaml
-          kubectl apply -f k8s/hpcjob.yaml
+          kubectl apply -f k8s/task-job.yaml
 
       - name: Verify controller image in Minikube
         run: |
@@ -82,7 +82,7 @@ jobs:
           minikube ssh -- df -h
 
       # Verify controller is working
-      - name: Check mock-hpc-job deployment
+      - name: Check task-job deployment
         run: |
           kubectl get pods --namespace=default
-          kubectl logs -l app=mock-hpc-job --namespace=default
+          kubectl logs -l app=task-job --namespace=default

@@ -7,7 +7,7 @@ import (
 )
 
 // API group name and version of custom resource
-const GroupName = "kubernetes.hpc.com"
+const GroupName = "kubernetes.tjob.com"
 const GroupVersion = "v1"
 
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: GroupVersion}
@@ -21,10 +21,10 @@ var (
 
 // addKnownTypes registers the custom resource types in the Scheme
 func addKnownTypes(scheme *runtime.Scheme) error {
-	// Register the resource and its list type HPCJob and HPCJobList
+	// Register the resource and its list type TaskJob and TaskJobList
 	scheme.AddKnownTypes(SchemeGroupVersion,
-		&HPCJob{},
-		&HPCJobList{},
+		&TaskJob{},
+		&TaskJobList{},
 	)
 
 	metav1.AddToGroupVersion(scheme, SchemeGroupVersion)

@@ -1,0 +1,15 @@
+apiVersion: kubernetes.tjob.com/v1
+kind: TaskJob
+metadata:
+  name: task-job
+  namespace: default
+spec:
+  jobName: task-job
+  state: Pending
+  image: task-job:latest
+  imagePullPolicy: IfNotPresent
+  replicas: 3
+  jobParams:
+    param1: "1234"
+    param2: "10"
+ 

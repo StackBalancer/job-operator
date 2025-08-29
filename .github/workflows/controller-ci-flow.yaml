@@ -31,45 +31,32 @@ jobs:
             ~/go/pkg/mod
           key: ${{ runner.os }}-go-mod-${{ hashFiles('**/go.sum') }}
 
-      - name: Build controller image
-        run: |
-          docker build -t task-job-controller:${{ github.sha }} .
-
-      - name: Export controller image
-        run: |
-          docker save task-job-controller:${{ github.sha }} -o task-job-controller-${{ github.sha }}.tar
-
-      - name: Build task-job image
-        run: |
-          docker build -t task-job ./task-job-service
-
-      - name: Export task-job image
-        run: |
-          docker save task-job -o task-job.tar
-
       # Set Minikube
-      - name: Run Minikube
+      - name: Start Minikube
         run: |
           curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
           sudo mv minikube /usr/local/bin/
           sudo chmod +x /usr/local/bin/minikube
-          minikube start --driver=docker
+          minikube start --driver=docker --container-runtime=docker
 
-      - name: Load images into Minikube
+      # Build images
+      - name: Build controller image
         run: |
-          minikube image load task-job-controller-${{ github.sha }}.tar
-          minikube image load task-job.tar
+          eval $(minikube docker-env)
+          docker build -t task-job-controller:latest .
 
-      - name: Replace controller image tag
+      - name: Build task-job service image
         run: |
-          IMAGE_TAG="task-job-controller:${{ github.sha }}"
-          sed -i "/image:/s|task-job-controller|$IMAGE_TAG|g" k8s/controller-deployment.yaml
+          eval $(minikube docker-env)
+          docker build -t task-job:latest ./task-job-service
 
-      # Deploy the controller to Minikube
-      - name: Deploy resources to Minikube
+      - name: Deploy CRD and controller
         run: |
           kubectl apply -f k8s/crd.yaml
           kubectl apply -f k8s/controller-deployment.yaml
+
+      - name: Deploy TaskJob
+        run: |
           kubectl apply -f k8s/task-job.yaml
 
       - name: Verify controller image in Minikube
@@ -81,8 +68,8 @@ jobs:
           minikube ssh -- free -h
           minikube ssh -- df -h
 
-      # Verify controller is working
-      - name: Check task-job deployment
+      - name: Verify pods
         run: |
-          kubectl get pods --namespace=default
-          kubectl logs -l app=task-job --namespace=default
+          kubectl get pods -n default
+          kubectl logs -l app=task-job-controller -n default
+          kubectl logs -l app=task-job -n default

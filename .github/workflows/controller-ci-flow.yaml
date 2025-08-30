@@ -49,26 +49,22 @@ jobs:
       ## Stateless TaskJob Controller
       - name: Build TaskJob Controller Image
         run: |
-          cd stateless
-          docker build -t task-job-controller:latest .
+          docker build -t task-job-controller:latest ./stateless
 
       ## Task-job service
       - name: Build TaskJob Service Image
         run: |
-          cd stateless/task-job-service
-          docker build -t task-job:latest .
+          docker build -t task-job:latest ./stateless/task-job-service
 
       ## Stateful Database Controller
       - name: Build Database Controller Image
         run: |
-          cd ../../stateful
-          docker build -t database-controller:latest .
+          docker build -t database-controller:latest ./stateful
 
       ## Postgres service image
       - name: Build Postgres Image
         run: |
-          cd postgres-svc
-          docker build -t postgres:15-alpine .
+          docker build -t postgres:15-alpine ./stateful/postgres-svc
 
       # Deploy CRDs and controllers
 

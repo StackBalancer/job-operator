@@ -49,21 +49,25 @@ jobs:
       ## Stateless TaskJob Controller
       - name: Build TaskJob Controller Image
         run: |
+          eval $(minikube docker-env)
           docker build -t task-job-controller:latest ./stateless
 
       ## Task-job service
       - name: Build TaskJob Service Image
         run: |
+          eval $(minikube docker-env)
           docker build -t task-job:latest ./stateless/task-job-service
 
       ## Stateful Database Controller
       - name: Build Database Controller Image
         run: |
+          eval $(minikube docker-env)
           docker build -t database-controller:latest ./stateful
 
       ## Postgres service image
       - name: Build Postgres Image
         run: |
+          eval $(minikube docker-env)
           docker build -t postgres:15-alpine ./stateful/postgres-svc
 
       # Deploy CRDs and controllers

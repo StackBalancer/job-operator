@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
-	taskjobv1 "task-job-operator/api/v1"
+	taskjobv1 "k8s-job-operator/stateless/api/v1"
 
 	"go.uber.org/zap/zapcore"
 	appsv1 "k8s.io/api/apps/v1"
@@ -129,7 +129,6 @@ func (r *TaskJobReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	if err := r.updateJobStatus(ctx, taskJob); err != nil {
 		return ctrl.Result{}, err
 	}
-
 
 	// Requeue to keep monitoring Pods
 	return ctrl.Result{RequeueAfter: 10 * time.Second}, nil
@@ -260,70 +259,69 @@ func getServiceObject(taskJob *taskjobv1.TaskJob) *corev1.Service {
 }
 
 func (r *TaskJobReconciler) updateJobStatus(ctx context.Context, taskJob *taskjobv1.TaskJob) error {
-    log := log.FromContext(ctx)
+	log := log.FromContext(ctx)
 
-    // List Pods for this TaskJob (selector must match Deployment labels)
-    pods, err := r.kubeClient.CoreV1().Pods(taskJob.Namespace).List(ctx, metav1.ListOptions{
-        LabelSelector: fmt.Sprintf("app=%s", taskJob.Spec.JobName),
-    })
-    if err != nil {
-        log.Error(err, "Failed to list pods for TaskJob", "jobName", taskJob.Spec.JobName)
-        return err
-    }
+	// List Pods for this TaskJob (selector must match Deployment labels)
+	pods, err := r.kubeClient.CoreV1().Pods(taskJob.Namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: fmt.Sprintf("app=%s", taskJob.Spec.JobName),
+	})
+	if err != nil {
+		log.Error(err, "Failed to list pods for TaskJob", "jobName", taskJob.Spec.JobName)
+		return err
+	}
 
-    // Default state
-    state := "Pending"
-    hasReady := false
-    hasFailed := false
+	// Default state
+	state := "Pending"
+	hasReady := false
+	hasFailed := false
 
-    for _, pod := range pods.Items {
-        switch pod.Status.Phase {
-        case corev1.PodRunning:
-            allReady := true
-            for _, cs := range pod.Status.ContainerStatuses {
-                if !cs.Ready {
-                    allReady = false
-                }
-                if cs.State.Waiting != nil && cs.State.Waiting.Reason == "CrashLoopBackOff" {
-                    hasFailed = true
-                }
-            }
-            if allReady {
-                hasReady = true
-            }
-        case corev1.PodFailed:
-            hasFailed = true
-        case corev1.PodSucceeded:
-            state = "Completed"
-        }
-    }
+	for _, pod := range pods.Items {
+		switch pod.Status.Phase {
+		case corev1.PodRunning:
+			allReady := true
+			for _, cs := range pod.Status.ContainerStatuses {
+				if !cs.Ready {
+					allReady = false
+				}
+				if cs.State.Waiting != nil && cs.State.Waiting.Reason == "CrashLoopBackOff" {
+					hasFailed = true
+				}
+			}
+			if allReady {
+				hasReady = true
+			}
+		case corev1.PodFailed:
+			hasFailed = true
+		case corev1.PodSucceeded:
+			state = "Completed"
+		}
+	}
 
-    // Final state decision
-    switch {
-    case hasFailed:
-        state = "Failed"
-    case hasReady && state != "Completed":
-        state = "Running"
-    }
+	// Final state decision
+	switch {
+	case hasFailed:
+		state = "Failed"
+	case hasReady && state != "Completed":
+		state = "Running"
+	}
 
-    // Only update if state changed
-    if taskJob.Status.State != state {
-        taskJob.Status.State = state
-        if state == "Completed" {
-            now := metav1.Now()
-            taskJob.Status.CompletionTime = &now
-        }
+	// Only update if state changed
+	if taskJob.Status.State != state {
+		taskJob.Status.State = state
+		if state == "Completed" {
+			now := metav1.Now()
+			taskJob.Status.CompletionTime = &now
+		}
 
-        if err := r.Status().Update(ctx, taskJob); err != nil {
-            log.Error(err, "Failed to update TaskJob status")
-            return err
-        }
-        log.Info("Updated TaskJob state", "newState", state)
-    }
+		if err := r.Status().Update(ctx, taskJob); err != nil {
+			log.Error(err, "Failed to update TaskJob status")
+			return err
+		}
+		log.Info("Updated TaskJob state", "newState", state)
+	}
 
-    return nil
+	return nil
 }
-
 
 func int32Ptr(i int32) *int32 {
 	return &i

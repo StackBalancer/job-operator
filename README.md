@@ -1,13 +1,18 @@
-# K8s Task Job Operator
+# K8s Job Operator
 
-This project defines a Kubernetes Operator for managing task jobs. The operator creates and manages `TaskJob` custom resources (CRs), automatically handling job execution using a task-job service that simulates job processing. The task-job service listens on port 8080 and simulates job completion after a delay.
+This project provides a Kubernetes Operator for managing task jobs and stateful databases. It includes two separate controllers:
+
+- Stateless Task Job Controller – Manages TaskJob CRs, creating ephemeral job deployments.
+
+- Stateful Database Controller – Manages Database CRs, creating PostgreSQL statefulsets with PVCs.
 
 ## Features
-- **TaskJob CRD**: A custom resource definition (CRD) that defines the structure for task jobs.
-- **Controller**: A Kubernetes controller that watches for `TaskJob` resources and triggers the job execution using the task-job service.
-- **Task Job Service**: A simple HTTP service that simulates job completion after a delay.
-- **Deployment Management**: Automatically creates and manages deployments, services, and jobs based on `TaskJob` resources.
 
+- **TaskJob CRD**: Define and execute task jobs using a stateless controller.
+- **Database CRD**: Define and manage databases with persistent storage.
+- **Automatic Resource Management**: Controllers handle Deployments, StatefulSets, Services, and PVCs automatically.
+- **Job Simulation**: Task job service simulates work and completes jobs after a configurable delay.
+- **Status Tracking**: CRs include .status subresource to monitor readiness and completion.
 ---
 
 ## Prerequisites
@@ -21,6 +26,36 @@ Before proceeding, make sure you have the following installed:
 
 ---
 
+## Folder Structure
+
+```
+k8s-job-operator/
+├── k8s
+│   ├── controller-db-deployment.yaml
+│   ├── controller-deployment.yaml
+│   ├── crd-database.yaml
+│   ├── crd.yaml
+│   ├── database-controller-rbac.yaml
+│   ├── postgres-database.yaml
+│   └── task-job.yaml
+├── LICENSE
+├── README.md
+├── stateful
+│   ├── api
+│   ├── cmd
+│   ├── Dockerfile
+│   ├── go.mod
+│   ├── go.sum
+│   └── postgres-svc
+├── stateless
+│   ├── api
+│   ├── cmd
+│   ├── Dockerfile
+│   ├── go.mod
+│   ├── go.sum
+│   └── task-job-service
+```
+
 ## Steps to Build and Deploy the Project
 
 ### 1. **Start Minikube Cluster**
@@ -29,45 +64,90 @@ Start a Minikube cluster by running the following command:
 
 ```bash
 minikube start
+# Set image registry
+eval $(minikube docker-env)
 ```
 
-### 2. **Build job-controller**
+### 2. **Build Controllers**
 
-Build task-job-controller and load image into minikube:
+#### Stateless TaskJob Controller
 
 ```bash
+cd stateless
 docker build -t task-job-controller .
-docker image save -o task-job-controller.tar task-job-controller
-minikube image load task-job-controller.tar
-rm task-job-controller.tar 
 ```
 
-### 3. **Build task-job-service**
-
-Build task-job-service and load image into minikube:
+#### Stateful Database Controller
 
 ```bash
+cd stateful
+docker build -t database-controller .
+```
+
+### 3. **Build services**
+
+Build task-job-service (stateless):
+
+```bash
+cd stateless
 docker build -t task-job ./task-job-service
-docker image save -o task-job.tar task-job
-minikube image load task-job.tar
-rm task-job.tar 
 ```
 
-### 4. **Deploy manifests to minikube**
+Build postgres (stateful) service:
 
 ```bash
-kubectl apply -f k8s/crd.yaml # CRDs
-kubectl apply -f k8s/controller-deployment.yaml # deploy the task-job-controller (and roles)
-kubectl apply -f k8s/task-job.yaml # job definition 
+cd stateful
+docker -t postgres:15-alpine ./postgres-svc
 ```
 
-### 5. **Cleanup**
+### 4. **Deploy CRDs and Controllers**
+
+#### Stateless TaskJob Controller
+
+```bash
+kubectl apply -f k8s/crd.yaml
+kubectl apply -f k8s/controller-deployment.yaml
+```
+
+#### Stateful Database Controller
+
+```bash
+kubectl apply -f k8s/crd-database.yaml
+kubectl apply -f k8s/controller-db-deployment.yaml
+```
+
+### 5. **Create CRs**
+
+#### TaskJob (Stateless)
+
+```bash
+kubectl apply -f k8s/task-job.yaml
+```
+
+#### Database (Stateful)
+
+```bash
+kubectl apply -f k8s/postgres-database.yaml
+```
+
+### 6. **Verify Resources**
+```bash
+kubectl get pods
+kubectl get statefulsets
+kubectl get pvc
+kubectl get svc
+kubectl describe taskjob <name>
+kubectl describe database <name>
+```
+
+### 7. **Cleanup**
 ```bash
 minikube delete
 ```
 
-### Summary of Key Sections:
-- **Building Docker Images**: Instructions for building both the controller and task job service images.
-- **Deploying to Minikube**: Steps to deploy the CRD, controller, and `TaskJob` resource.
-- **Testing**: How to verify that your job is running properly.
-- **Cleanup**: Commands for cleaning up the deployed resources and Minikube cluster.
+### Notes
+- Both controllers run independently but can coexist in the same cluster.
+
+- The database controller automatically creates headless services and PVCs for persistent storage.
+
+- Status subresources are enabled for both TaskJob and Database CRs, allowing the controllers to update .status.phase and readiness information.

@@ -1,0 +1,11 @@
+apiVersion: databases.stackbalancer.com/v1
+kind: Database
+metadata:
+  name: postgres-db
+  namespace: default
+spec:
+  databaseName: postgres-db
+  image: postgres:15-alpine
+  replicas: 1
+  storage: 1Gi
+  password: examplepass

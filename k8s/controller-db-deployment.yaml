@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: database-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: database-controller
+  template:
+    metadata:
+      labels:
+        app: database-controller
+    spec:
+      serviceAccountName: database-controller
+      containers:
+        - name: database-controller
+          image: database-controller
+          args:
+            - "--zap-log-level=debug"
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9443
+              protocol: TCP

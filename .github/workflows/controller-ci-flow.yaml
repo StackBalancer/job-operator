@@ -1,4 +1,4 @@
-name: Build and Deploy TaskJob Controller to Minikube
+name: Build and Deploy Operators to Minikube
 
 on:
   push:
@@ -10,7 +10,7 @@ on:
 
 jobs:
   setup:
-    name: Deploy Controller to Minikube
+    name: Deploy Controllers and Services to Minikube
     runs-on: ubuntu-latest
 
     steps:
@@ -31,45 +31,92 @@ jobs:
             ~/go/pkg/mod
           key: ${{ runner.os }}-go-mod-${{ hashFiles('**/go.sum') }}
 
-      # Set Minikube
-      - name: Start Minikube
+      # Install Minikube
+      - name: Install Minikube
         run: |
           curl -Lo minikube https://storage.googleapis.com/minikube/releases/latest/minikube-linux-amd64
           sudo mv minikube /usr/local/bin/
           sudo chmod +x /usr/local/bin/minikube
-          minikube start --driver=docker --container-runtime=docker
 
-      # Build images
-      - name: Build controller image
+      # Start Minikube
+      - name: Start Minikube
         run: |
+          minikube start --driver=docker --container-runtime=docker
           eval $(minikube docker-env)
+
+      # Build Docker images
+
+      ## Stateless TaskJob Controller
+      - name: Build TaskJob Controller Image
+        run: |
+          cd stateless
           docker build -t task-job-controller:latest .
 
-      - name: Build task-job service image
+      ## Task-job service
+      - name: Build TaskJob Service Image
         run: |
-          eval $(minikube docker-env)
-          docker build -t task-job:latest ./task-job-service
+          cd stateless/task-job-service
+          docker build -t task-job:latest .
 
-      - name: Deploy CRD and controller
+      ## Stateful Database Controller
+      - name: Build Database Controller Image
+        run: |
+          cd ../../stateful
+          docker build -t database-controller:latest .
+
+      ## Postgres service image
+      - name: Build Postgres Image
+        run: |
+          cd postgres-svc
+          docker build -t postgres:15-alpine .
+
+      # Deploy CRDs and controllers
+
+      ## TaskJob (stateless)
+      - name: Deploy TaskJob CRD and Controller
         run: |
           kubectl apply -f k8s/crd.yaml
           kubectl apply -f k8s/controller-deployment.yaml
 
-      - name: Deploy TaskJob
+      ## Database (stateful)
+      - name: Deploy Database CRD and Controller
+        run: |
+          kubectl apply -f k8s/crd-database.yaml
+          kubectl apply -f k8s/controller-db-deployment.yaml
+
+      # Deploy CR instances
+
+      ## TaskJob
+      - name: Deploy TaskJob Resource
         run: |
           kubectl apply -f k8s/task-job.yaml
 
-      - name: Verify controller image in Minikube
+      ## Database
+      - name: Deploy Database Resource
+        run: |
+          kubectl apply -f k8s/postgres-database.yaml
+
+      # Verify resources
+
+      - name: Verify Docker Images in Minikube
         run: |
           minikube ssh -- docker images
 
-      - name: Check Minikube resources
+      - name: Check Minikube Node Resources
         run: |
           minikube ssh -- free -h
           minikube ssh -- df -h
 
-      - name: Verify pods
+      - name: Verify Pods and Logs
         run: |
           kubectl get pods -n default
           kubectl logs -l app=task-job-controller -n default
           kubectl logs -l app=task-job -n default
+          kubectl logs -l app=database-controller -n default
+
+      - name: Verify StatefulSet and PVC
+        run: |
+          kubectl get statefulsets
+          kubectl get pvc
+          kubectl get svc
+          kubectl describe database postgres-db
